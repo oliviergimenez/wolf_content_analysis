@@ -1,4 +1,4 @@
-# Wolf in newspapers: Content analysis of Nice Matin / Le Monde articles
+# Wolf in newspapers: Content analysis of French articles
 
 Contains R code (with French comments I'm afraid) to perform content analyses of local and national French newspapers (namely, Nice Matin and Le Monde) on wolf. Unfortunately, I cannot share the data yet, you'll have to wait for the publication. Hope this is helpful somehow, anyway.
 
