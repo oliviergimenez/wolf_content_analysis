@@ -1,12 +1,5 @@
 # Wolf in newspapers: Analyse content of Nice Matin / Le Monde (in French)
 
+Contains R code to perform content analyses of local and national French newspapers (namely, Nice Matin and Le Monde) on wolf. Unfortunately, I cannot share the data yet, you'll have to wait for the publication. Hope this is helpful somehow, anyway.
 
-# Analysis of the Bottlenose dolphin social network  
-
-Contains R code to perform various analyses of the social structure of Bottlenose dolphin in the North-Western Mediterranean Sea. 
-I basically relied on the vignettes and papers associated with the packages I used for these analyses, check them out. 
-Unfortunately, I cannot share the data yet, you'll have to wait for the publication. Hope this is helpful somehow, anyway.
-
-These analyses were done for the [GDEGeM project](http://www.gdegem.org/). 
-If you're interested results on abundance for this project, check out [my talk](http://www.slideshare.net/OlivierGIMENEZ1/a-network-for-bottlenose-dolphin-photoid-monitoring-along-the-french-mediterranean-coast) at the [International Workshop on Bottlenose dolphin conservation and monitoring in the North-Western Mediterranean Sea](http://www.gdegem.org/international-workshop). 
-A tutorial on estimating abundance using open capture-recapture models is available on GitHub [here](https://github.com/oliviergimenez/abundance_estimation).
+We used a non-supervised approach (the topics are statistically determined, not chosen a priori) known as `structural topic modeling`: see [Westgate et al. (2015)](http://onlinelibrary.wiley.com/doi/10.1111/cobi.12605/abstract) for an introduction and [Roberts et al. (2015)](https://cran.r-project.org/web/packages/stm/vignettes/stmVignette.pdf) for an implementation in R.
