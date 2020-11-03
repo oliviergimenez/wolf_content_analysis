@@ -1,8 +1,10 @@
 ---
-title: "'Media and wolves: Content analysis of French local/national newspapers'"
+title: '''Media and wolves: Content analysis of French local/national newspapers'''
 author: "Olivier Gimenez"
-date: "12/8/2016 (updated: `r Sys.Date()`)"
-output: html_document
+date: '12/8/2016 (updated: `r Sys.Date()`)'
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
