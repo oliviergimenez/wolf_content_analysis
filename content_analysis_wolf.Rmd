@@ -1,0 +1,443 @@
+---
+title: "'Media and wolves: Content analysis of French local/national newspapers'"
+author: "Olivier Gimenez"
+date: "12/8/2016 (updated: `r Sys.Date()`)"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      cache = FALSE, 
+                      message = FALSE, 
+                      warning = FALSE)
+```
+
+# Introduction
+
+Il s'agit d'une analyse de contenu des corpus loups Le Monde et Nice Matin constitués par Marie Chandelier. On adopte une Approche non-supervisée (on ne définit pas les topics à l’avance, ils sont déterminés statistiquement) récente connue sous le nom de `structural topic modeling` : voir [Westgate et al. (2015)](http://onlinelibrary.wiley.com/doi/10.1111/cobi.12605/abstract) pour une introduction et [Roberts et al. (2015)](https://cran.r-project.org/web/packages/stm/vignettes/stmVignette.pdf) pour une implémentation dans R.
+
+Quelques définitions : un `topic` est un mélange de mots où chaque mot a une probabilité d’appartenir au topic. Un `document` (article) est un mélange de topics. La `prévalence` est la proportion d’un document associée à un topic, le `contenu` réfère aux mots utilisés dans un topic. 
+
+L’originalité ici est qu’on va essayer d’expliquer la variabilité dans la prévalence et le contenu en fonction de covariables, à savoir l’année (de 1993 à 2014) et le journal (Le Monde vs. Nice Matin).
+
+On commence d'abord par mettre en forme les deux corpus en préparation des analyses statistiques. Chaque article est stocké dans un fichier texte. Tous les articles du Monde sur la période considérée sont dans un répertoire, idem pour Nice Matin. 
+
+Une fois le corpus mis au propre, on ajuste un modèle STM. Ici on considère 15 topics et un effet i) de l’interaction de l’année et du journal sur la prévalence, et ii) du journal sur le contenu.
+
+# Création du corpus
+
+On construit d'abord le jeu de données. On charge tous le package nécessaire.
+```{r}
+library(tm)
+library(gdata)
+library(stm)
+```
+
+On lit les fichiers texte du monde qui sont dans le répertoire spécifié et en fait un corpus:
+```{r}
+(base_monde <- VCorpus(DirSource("MONDE_thematique_principale", encoding="utf-8"),
+                      readerControl = list(reader = readPlain, language = "fr", load = TRUE)))
+#names(base_monde)
+#lapply(base_monde, as.character)
+```
+
+On récupère les métadonnées puis ajoute les année (1993-2014) et journal (lemonde/nicematin):
+```{r}
+dat_monde <- read.xls("metada_principale_monde_fonction_ratio.xlsx", header = T)
+dim(dat_monde)
+# supprime les 3 dernieres lignes qui sont bizarres
+dat_monde <- dat_monde[-c(121,122,123),]
+# on vire les modalités bizarres, puis on convertit année en numérique
+dat_monde$annee <- factor(dat_monde$annee)
+dat_monde$annee <- as.numeric(levels(dat_monde$annee))[dat_monde$annee] # astuce trouvée http://tinyurl.com/hfsqtze
+metadata <- data.frame(year = dat_monde$annee, title = rep('LeMonde',120))
+meta(base_monde, tag = c("year","title")) <- metadata
+#meta(base_monde)
+#base_monde
+```
+
+On lit les fichiers texte de Nice Matin qui sont dans le répertoire spécifié et en fait un corpus. A noter : j'ai supprimé les 2 articles de 1992 pour faire coincider la periode avec Le Monde.
+```{r}
+(base_nice <- VCorpus(DirSource("NICE_thematique_principale", encoding = "UTF-8"), 
+                     readerControl = list(reader=readPlain, language = "fr", load = TRUE)))
+#names(base_nice)
+#lapply(base_nice, as.character)
+```
+
+On récupère les métadonnées puis ajoute année (1993-2014) et journal (lemonde/nicematin):
+```{r}
+dat_nice <- read.xls("metadata-principale-nice-matin-fonction-ratio.xlsx",
+                     header = T)
+head(dat_nice)
+dim(dat_nice)
+# on supprime les deux premières lignes qui correspondent à 2 articles en 1992
+dat_nice <- dat_nice[-c(1,2),]
+metadata <- data.frame(year = dat_nice$annee,
+                       title = rep('NiceMatin', 744))
+meta(base_nice,tag = c("year","title")) <- metadata
+#meta(base_nice)
+#base_nice
+```
+
+On joint joint les deux bases:
+```{r}
+base <- c(base_monde, base_nice)
+#base
+#str(base)
+#meta(base)
+```
+
+On jette un coup d'oeil à la base:
+```{r}
+#inspect(base)
+#lapply(base, as.character)
+base2 <- base
+```
+
+On applique tout un tas de traitements aux textes
+```{r}
+# remplace funny caracteres par un espace
+replace_chars <- content_transformer (function(x) gsub("<e0>","à", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("<ea>","ê", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("<e9>","é", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("<e8>","è", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("<ab>"," ", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("<bb>"," ", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("\u0092"," ", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("\u0085"," ", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("\u0093"," ", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("\u0094"," ", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("\u0096"," ", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("\u0095"," ", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("\u0091"," ", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("\""," ", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("\u009c","oe", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("patous","patou", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("ãª","ê", x))
+base2 <- tm_map(base2, replace_chars)
+replace_chars <- content_transformer (function(x) gsub("ã","é", x))
+base2 <- tm_map(base2, replace_chars)
+
+# capitales deviennent minuscules
+base2 <- tm_map(base2, content_transformer(tolower))
+#lapply(base2[1:10], as.character)
+
+# aujourd'hui -> aujourdhui
+replace_chars <- content_transformer (function(x) gsub("aujourd'hui","aujourdhui", x))
+base2 <- tm_map(base2, replace_chars)
+
+# remplace les apostrophes par des espaces
+replace_chars <- content_transformer (function(x) gsub("'"," ", x))
+base2 <- tm_map(base2, replace_chars)
+#lapply(base2[1:4], as.character)
+
+#Remplace la ponctuation par des espaces (garde les tirets)
+base2 <- tm_map(base2, content_transformer(removePunctuation), preserve_intra_word_dashes=T)
+#lapply(base2[1:5], as.character)
+
+#retire les articles, prépositions et autres mots analogues
+base2 <- tm_map(base2, content_transformer(removeWords), stopwords("french")) 
+#lapply(base2[1:5], as.character)
+
+#retire les nombres
+base2 <- tm_map(base2,content_transformer(removeNumbers)) 
+
+# tronque à la racine
+base2 <- tm_map(base2,stemDocument,language="fr")
+
+#retire les espaces inutiles
+base2 <- tm_map(base2,content_transformer(stripWhitespace)) 
+#lapply(base2[100:500], as.character)
+#lapply(base2[800:864], as.character)
+```
+
+On crée un doc qu'on peut analyser par la suite, une matrice en gros:
+```{r}
+dtm <- DocumentTermMatrix(base2)
+str(dtm)
+```
+
+On récupère le nombre de mots par texte
+```{r, eval=FALSE, include=FALSE}
+dtmT <- inspect(dtm)
+ww <- rowSums(dtmT) # nb mots par texte
+#ww
+```
+
+On calcule la proportion du mot loup
+```{r, eval=FALSE, include=FALSE}
+# selectionne la colonne de dtmT qui correspond au mot loup
+mask <- (colnames(dtmT) == "loup")
+# cherche le nb d'occurrences du mot "loup" dans les textes
+occur <- dtmT[,mask]
+# calcule la prop de loup dans les textes
+occur / ww * 100
+```
+
+On obtient liste des mots présents au moins à 50 reprises
+```{r}
+findFreqTerms(dtm,50)
+```
+
+```{r}
+# On supprime mots rares
+dtm2 <- removeSparseTerms(dtm, 0.95)
+findFreqTerms(dtm2,50)
+dtm2 = dtm
+```
+
+On extrait base pour le monde et nice matin (après traitement et avant traitement)
+```{r}
+lemonde2 <- subset(base2,meta(base2)$title=='LeMonde')
+nicematin2 <- subset(base2,meta(base2)$title=='NiceMatin')
+lemonde <- subset(base,meta(base)$title=='LeMonde')
+nicematin <- subset(base,meta(base)$title=='NiceMatin')
+```
+
+
+On lit corpus entier pour analyse via package STM
+```{r}
+out <- readCorpus(dtm2, type = "Matrix")
+docs <- out$documents # textes 
+vocab <- out$vocab # mots
+meta <-meta(base)
+#head(meta)
+```
+
+```{r, eval=FALSE, include=FALSE}
+# Problème dans la base reformattée par Sascha: docs est de longueur 863, il semble qu'un texte soit passé à la trappe. Mais lequel?
+length(names(out$documents))
+length(dtm2$dimnames$Docs)
+x = names(out$documents)
+str(x)
+length(x)
+y = dtm2$dimnames$Docs
+str(y)
+y[!(y %in% x)]
+#Et le vainqueur est : "LOU-NM-2007-06-03-st.txt" ; je prends ce fichier de la base originale, et je corrige la base de Sascha.
+```
+
+# Analyse de contenu
+
+On analyse le jeu de données via l'approche topic modeling. On analyse les corpus Le Monde et Nice Matin ensemble, avec le titre comme covariable sur la prévalence et le contenu (on ne distingue pas le type épisodique/thématique). On ajuste un modele stm avec 15 topics. J'ai essaye 5, 10, 20, 25 et il semble que ça soit la solution la plus interprétable. On sauvegarde les résultats car l'ajustement prend beaucoup de temps.
+
+```{r eval = FALSE}
+poliblogPrevFit_15 <- stm(documents = docs, 
+                          vocab = vocab, 
+                          K = 15,
+                          prevalence =~ title + s(year),
+                          content =~ title, 
+                          max.em.its = 75,
+                          data = meta, 
+                          init.type = "Spectral")
+save(poliblogPrevFit_15, file = 'stm_marie.RData')
+```
+
+On charge le résultat de l'analyse. 
+```{r}
+load('stm_marie.RData')
+wolf_stm <- poliblogPrevFit_15
+```
+
+On affiche les mots associés à chaque topic, d'abord dans l'ordre, puis par importance ie fréquence dans corpus :
+```{r}
+labelTopics(wolf_stm)
+plot(wolf_stm, 
+     type = "summary",
+     n = 1,
+     text.cex = 0.3)
+```
+
+On cherche les 15 topics avec le plus de poids. On jette un coup d'oeil sur GitHub à la fonction `plot.STM` qu'on adapte pour nos besoins :
+```{r}
+x <- wolf_stm
+model <- x
+contentcov <- length(model$beta$logbeta)!=1
+type <- "summary"
+n <- 1
+topics <- NULL
+labeltype <- "prob"
+frexw <- .5
+custom.labels <- NULL
+topic.names <- NULL
+if(!is.null(custom.labels)) labeltype <- "custom"
+if(is.null(n)) n <- switch(type, 
+                             summary=3, 
+                             labels=20,
+                             perspectives=25,
+                             hist=3)
+if(type!="perspectives" & is.null(topics)) topics <- 1:model$settings$dim$K
+
+if(labeltype!="custom"){
+    if(type != "perspectives") {
+      lab <- labelTopics(model, topics=topics, n = n, frexweight=frexw)
+      if(contentcov) {
+        lab <- lab$topics
+      } else {
+        lab <- lab[[labeltype]]
+      }    
+    }
+  } else {
+    lab <- custom.labels
+    if(length(lab)!=length(topics)) lab <- rep_len(lab, length.out=length(topics))
+  }
+  
+if(!is.null(topic.names))  topic.names <- rep_len(topic.names, length.out=length(topics))
+
+frequency <- colMeans(model$theta[,topics]) # expected topic prop de pour les 100 premiers topics
+rank <- order(frequency, decreasing=TRUE)
+rank[1:15] # les 15 premiers topics
+frequency[rank[1:15]] # et leur poids
+sum(frequency[rank[1:15]]) # et leur poids
+```
+
+J'en profite pour refaire le graphe des Top Topics en ne prenant que les 15 premiers topics classés par ordre croissant de l'Expected Topic Proportion:
+```{r}
+xlim <- c(0,min(2*max(frequency), 1))
+ylim <- c(0,15)
+main <- "Top Topics"
+xlab <- "Expected Topic Proportions"
+ylab <- ""
+
+plot(c(0,0), 
+     type = "n", 
+     xlim = xlim, 
+     ylim = ylim, 
+     main = main, 
+     yaxt = "n", 
+     ylab = ylab, 
+     xlab = xlab)
+for(i in 1:15) {
+  lines(c(0,frequency[rank[i]]), c(i, i))
+  text(frequency[rank[i]] + .01, i , rank[i], pos = 4, cex = 1.2)
+}
+```
+
+
+Les mots indicatifs pour topic listes :
+```{r}
+#ppi <- 300
+#name.fig <- 'label_topic.png'
+#png(name.fig, width = 6*ppi, height = 6*ppi, res = ppi)
+plot(wolf_stm, type = "labels", topics = rank[1:15], text.cex = 0.4)
+#dev.off()
+```
+
+La différence dans le contenu d'un topic en fonction de la covariable contenu (ici le journal)
+```{r}
+# Make a 6x6 inch image at 300dpi
+#pi <- 300
+for (i in rank[1:15]){
+#name.fig <- paste('diff_topic',i,'.png',sep='')
+#png(name.fig, width = 6*ppi, height = 6*ppi, res = ppi)
+plot(wolf_stm, type = "perspectives", topics = i, main = paste("topic ",i,sep=''))
+#dev.off()
+}
+```
+
+On regarde l'évolution temporelle de la proportion du corpus que le topic occupe (en rouge, Nice Matin ; en bleu, Le Monde):
+```{r}
+#ppi <- 300
+for (i in rank[1:15]){
+#name.fig = paste('trend_topic_add',i,'.png',sep='')
+#png(name.fig, width = 6*ppi, height = 6*ppi, res = ppi)
+  prep <- estimateEffect(c(i) ~ title * year, 
+                         wolf_stm,
+                         metadata = meta, 
+                         uncertainty = "None")
+  prep$parameters
+  plot.estimateEffect(prep, 
+                      covariate = "year", 
+                      model = wolf_stm,
+                      method = "continuous", 
+                      xlab = "year", 
+                      moderator = "title",
+                      moderator.value = "LeMonde", 
+                      linecol = "blue",  
+                      printlegend = F,
+                      main = paste("topic",i))
+  plot.estimateEffect(prep, 
+                      covariate = "year", 
+                      model = wolf_stm,
+                      method = "continuous", 
+                      xlab = "year", 
+                      moderator = "title",
+                      moderator.value = "NiceMatin", 
+                      linecol = "red", 
+                      add = T,
+                      printlegend = F)
+#dev.off()
+}
+```
+
+On regarde GRAPHICAL NETWORK DISPLAY of how closely related topics are to one another, (i.e., how likely they are to appear in the same document):
+```{r}
+mod.out.corr <- topicCorr(wolf_stm)
+plot.topicCorr(mod.out.corr)
+```
+
+On détermine les topics les plus importants et on les interprète. Pour ce faire, on récupère les documents qui sont très corrélés avec le topic qui nous intéresse:
+
+On transforme d'abord la base en un vecteur de caractères où chaque composante est un doc:
+```{r}
+texts <- rep(NA,length(base))
+for (i in 1:length(base)){
+	temp <- as.character(lapply(base[i], as.character))
+	texts[i] <- temp
+}
+```
+
+On cherche et affiche les 5 documents les plus associés aux topics:
+```{r}
+for (i in rank[1:15]){
+  thoughts <- findThoughts(wolf_stm, texts = texts, n = 5, topics=i)$docs[[1]]
+  # pour améliorer la lisibilité, rajoute des séparateurs entre les 5 documents
+  thoughts <- gsub("c[:(:]","-------------------------------------------",thoughts)
+  write(thoughts,paste("topic",i,".txt",sep=''))
+}
+```
+
+
+<!-- # Rééchantillonnage pour gérer le déséquilibre en nombre d'article Le Monde (120) vs. Nice Matin (744) -->
+
+<!-- Cette approche a été abandonnée, voir plus haut pourquoi, et en-dessous pour le code. -->
+
+<!-- ```{r} -->
+<!-- # set.seed(5) -->
+<!-- # nb_bootstrap = 5   -->
+<!-- # outlist = vector("list", nb_bootstrap) -->
+<!-- # for (i in 1:nb_bootstrap){ -->
+<!-- # ind_nicematin = which(meta[,2]=='NiceMatin') # où sont les articles de NM dans les métadonnées -->
+<!-- # ind_resampled = sample(ind_nicematin,size=744-120,replace=FALSE) # pick nb articles NM - LM pour # les supprimer -->
+<!-- # pseudo_base2 = base2[-ind_resampled] -->
+<!-- # pseudo_meta = meta[-ind_resampled,] # rownames(pseudo_meta) < -1:240 -->
+<!-- # meta(pseudo_base2,tag=c("year","title")) = pseudo_meta -->
+<!-- # pseudo_dtm = DocumentTermMatrix(pseudo_base2) -->
+<!-- # pseudo_dtm2 = removeSparseTerms(pseudo_dtm, 0.95) -->
+<!-- # pseudo_out = readCorpus(pseudo_dtm2, type = "Matrix") -->
+<!-- # pseudo_docs = pseudo_out$documents # textes  -->
+<!-- # pseudo_vocab = pseudo_out$vocab # mots -->
+<!-- # pseudo_meta = meta(pseudo_base2) -->
+<!-- #  -->
+<!-- # pseudo_fit <- stm(pseudo_docs, pseudo_vocab, K = 15,prevalence =~ title * year,content =~ title, max.em.its = 75,data = pseudo_meta, init.type = "Spectral") -->
+<!-- # outlist[[i]] <- pseudo_fit -->
+<!-- # } -->
+<!-- ``` -->
+
+
